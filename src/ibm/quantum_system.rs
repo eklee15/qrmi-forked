@@ -255,8 +255,7 @@ impl QuantumResource for IBMQuantumSystem {
         // IAM permission. Accounts that lack this permission receive a 403, so
         // treat any failure here as "capacity info unavailable" rather than a
         // fatal error -- mirroring the approach taken for IQMServer in #287.
-        let mut capacity_error = None;
-        let capacity = match tokio::join!(
+        let (capacity, capacity_error) = match tokio::join!(
             self.api_client
                 .get_backend_lanes_configuration::<BackendLanesConfiguration>(
                     &self.backend_name
@@ -271,29 +270,35 @@ impl QuantumResource for IBMQuantumSystem {
                     .filter(|job| job.backend == self.backend_name)
                     .filter(|job| matches!(job.status, JobStatus::Running))
                     .count() as u64;
-                Some(ResourceCapacity {
-                    available_slots: lane_config.hpc_workload_manager.lanes.saturating_sub(count),
-                    max_slots: lane_config.hpc_workload_manager.lanes,
-                })
+                (
+                    Some(ResourceCapacity {
+                        available_slots: lane_config
+                            .hpc_workload_manager
+                            .lanes
+                            .saturating_sub(count),
+                        max_slots: lane_config.hpc_workload_manager.lanes,
+                    }),
+                    None,
+                )
             }
-            (Err(e), _) => {
+            (Err(e), _) => (
+                None,
                 // The most common cause is the account missing the
                 // `direct-access-lane-configuration.list` IAM permission (HTTP 403).
-                capacity_error = Some(format!(
+                Some(format!(
                     "could not retrieve lane configuration ({}); \
                      capacity info will not be available",
                     e
-                ));
-                None
-            }
-            (_, Err(e)) => {
-                capacity_error = Some(format!(
+                )),
+            ),
+            (_, Err(e)) => (
+                None,
+                Some(format!(
                     "could not retrieve job list ({}); \
                      capacity info will not be available",
                     e
-                ));
-                None
-            }
+                )),
+            ),
         };
 
         let status = match backend.status {
