@@ -277,7 +277,7 @@ impl QuantumResource for IBMQuantumSystem {
                     None,
                 )
             }
-            (Err(e), _, _) => return Err(e),
+            (Err(e), _, _) => return Err(e.into()),
             (Ok(backend), Err(e), _) => (
                 backend,
                 None,
